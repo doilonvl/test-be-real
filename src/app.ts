@@ -124,6 +124,12 @@ app.use((req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS")
     return next();
 
+  // If caller dùng Bearer token (Authorization header) thì bỏ qua CSRF vì không còn là cookie-based
+  const authHeader = req.get("authorization");
+  if (authHeader && /^bearer\s+/i.test(authHeader)) {
+    return next();
+  }
+
   const headerToken = req.get(CSRF_HEADER);
   const cookieToken = req.cookies?.[CSRF_COOKIE];
 
