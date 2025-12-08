@@ -35,11 +35,10 @@ function getBaseCookieOptions(path: string): CookieOptions {
 
   // 🔧 SAU NÀY KHI LÊN hasakeplay.com.vn VÀ MUỐN COOKIE DÙNG CHUNG
   // CHO TẤT CẢ SUBDOMAIN (*.hasakeplay.com.vn) THÌ BẬT KHỐI NÀY:
-  /*
+
   if (IS_PROD && COOKIE_DOMAIN) {
     base.domain = COOKIE_DOMAIN; // ví dụ "hasakeplay.com.vn"
   }
-  */
 
   return base;
 }

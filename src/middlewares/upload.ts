@@ -60,6 +60,29 @@ const storage = new CloudinaryStorage({
   },
 });
 
-export const upload = multer({ storage });
+const ALLOWED_IMAGE = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const ALLOWED_RAW = ["application/pdf"];
+const ALLOWED_VIDEO = ["video/mp4"];
+
+export const upload = multer({
+  storage,
+  limits: {
+    fileSize: 15 * 1024 * 1024, // 15MB per file
+    files: 50,
+  },
+  fileFilter(_req, file, cb) {
+    const { mimetype } = file;
+    if (
+      ALLOWED_IMAGE.includes(mimetype) ||
+      ALLOWED_RAW.includes(mimetype) ||
+      ALLOWED_VIDEO.includes(mimetype)
+    ) {
+      return cb(null, true);
+    }
+    return cb(
+      new Error("Unsupported file type. Only images, mp4, and pdf are allowed")
+    );
+  },
+});
 export const uploadSingle = upload.single("file");
 export const uploadMultiple = upload.array("files", 50);

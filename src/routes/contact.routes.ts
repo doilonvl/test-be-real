@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { contactController } from "../controllers/contact.controller";
+import { authAdmin } from "../middlewares/authAdmin";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ const contactLimiter = rateLimit({
 
 router.post("/", contactLimiter, contactController.create);
 
-router.get("/", contactController.list);
-router.get("/:id", contactController.getOne);
+router.get("/", authAdmin, contactController.list);
+router.get("/:id", authAdmin, contactController.getOne);
 
 export default router;
