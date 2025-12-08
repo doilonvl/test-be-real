@@ -11,8 +11,15 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes";
 import helmet from "helmet";
 import { authAdmin } from "./middlewares/authAdmin";
+import crypto from "node:crypto";
 
 const IS_PROD = process.env.NODE_ENV === "production";
+const COOKIE_SECURE =
+  String(process.env.COOKIE_SECURE || "false").toLowerCase() === "true";
+const COOKIE_DOMAIN =
+  process.env.COOKIE_DOMAIN && process.env.COOKIE_DOMAIN.trim().length > 0
+    ? process.env.COOKIE_DOMAIN.trim()
+    : undefined;
 
 const app = express();
 // Trust first proxy (e.g., Nginx/Ingress) so secure cookies work behind TLS termination
@@ -93,9 +100,25 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: ["text/*"] }));
 app.use(morgan("dev"));
 
-// Simple double-submit CSRF: FE must send the same token in cookie and header X-CSRF-Token for write operations
+// Issue CSRF cookie from API domain if missing, so FE chỉ cần đọc và gửi lại header
 const CSRF_HEADER = "x-csrf-token";
 const CSRF_COOKIE = "csrf_token";
+app.use((req, res, next) => {
+  if (!req.cookies?.[CSRF_COOKIE]) {
+    const token = crypto.randomBytes(32).toString("hex");
+    res.cookie(CSRF_COOKIE, token, {
+      httpOnly: false, // FE cần đọc để gắn vào header
+      sameSite: IS_PROD ? "none" : "lax",
+      secure: IS_PROD ? true : COOKIE_SECURE,
+      path: "/",
+      domain: COOKIE_DOMAIN,
+    });
+    (req as any).cookies = { ...(req as any).cookies, [CSRF_COOKIE]: token };
+  }
+  return next();
+});
+
+// Simple double-submit CSRF: FE must send the same token in cookie and header X-CSRF-Token for write operations
 app.use((req, res, next) => {
   // Allow safe methods and preflight through
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS")
