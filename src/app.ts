@@ -100,14 +100,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: ["text/*"] }));
 app.use(morgan("dev"));
 
-// Issue CSRF cookie from API domain if missing, so FE chỉ cần đọc và gửi lại header
+// Issue CSRF cookie from API domain if missing, then enforce double-submit:
+// - Accept when header and cookie match.
+// - If cookie missing but header present, set cookie from header and accept (to avoid mismatch on first write).
+// - Safe methods + preflight are skipped.
 const CSRF_HEADER = "x-csrf-token";
 const CSRF_COOKIE = "csrf_token";
 app.use((req, res, next) => {
+  // Always ensure we have a CSRF cookie for subsequent requests
   if (!req.cookies?.[CSRF_COOKIE]) {
     const token = crypto.randomBytes(32).toString("hex");
     res.cookie(CSRF_COOKIE, token, {
-      httpOnly: false, // FE cần đọc để gắn vào header
+      httpOnly: false, // FE needs to read to set header
       sameSite: IS_PROD ? "none" : "lax",
       secure: IS_PROD ? true : COOKIE_SECURE,
       path: "/",
@@ -115,21 +119,31 @@ app.use((req, res, next) => {
     });
     (req as any).cookies = { ...(req as any).cookies, [CSRF_COOKIE]: token };
   }
-  return next();
-});
 
-// Simple double-submit CSRF: FE must send the same token in cookie and header X-CSRF-Token for write operations
-app.use((req, res, next) => {
-  // Allow safe methods and preflight through
+  // CSRF validation for write methods
   if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS")
     return next();
 
   const headerToken = req.get(CSRF_HEADER);
   const cookieToken = req.cookies?.[CSRF_COOKIE];
-  if (!headerToken || !cookieToken || headerToken !== cookieToken) {
-    return res.status(403).json({ message: "CSRF token invalid or missing" });
+
+  // If no cookie but header provided, sync cookie to header to allow first write after FE sets header
+  if (!cookieToken && headerToken) {
+    res.cookie(CSRF_COOKIE, headerToken, {
+      httpOnly: false,
+      sameSite: IS_PROD ? "none" : "lax",
+      secure: IS_PROD ? true : COOKIE_SECURE,
+      path: "/",
+      domain: COOKIE_DOMAIN,
+    });
+    return next();
   }
-  return next();
+
+  if (headerToken && cookieToken && headerToken === cookieToken) {
+    return next();
+  }
+
+  return res.status(403).json({ message: "CSRF token invalid or missing" });
 });
 
 app.get("/healthz", (_req, res) => res.json({ ok: true }));
