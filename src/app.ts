@@ -23,11 +23,14 @@ const parsedOrigins = (process.env.CORS_ORIGINS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-if (IS_PROD && parsedOrigins.length === 0) {
-  throw new Error(
-    "CORS_ORIGINS is required in production (comma-separated list, no spaces)."
-  );
-}
+const inferredProdOrigins = [
+  process.env.FRONTEND_ORIGIN,
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+  process.env.RENDER_EXTERNAL_URL,
+]
+  .map((s) => (s || "").trim())
+  .filter(Boolean);
 
 const fallbackDevOrigins = [
   "http://localhost:3000",
@@ -39,11 +42,27 @@ const fallbackDevOrigins = [
 const allowList =
   parsedOrigins.length > 0
     ? parsedOrigins
+    : inferredProdOrigins.length > 0
+    ? Array.from(new Set(inferredProdOrigins))
     : Array.from(new Set(fallbackDevOrigins));
 
-if (!IS_PROD && parsedOrigins.length === 0) {
+if (IS_PROD && allowList.length === 0) {
+  throw new Error(
+    "CORS_ORIGINS is required in production (comma-separated list, no spaces)."
+  );
+}
+
+if (!IS_PROD) {
+  if (parsedOrigins.length === 0) {
+    console.warn(
+      "CORS_ORIGINS not set; using fallback dev origins (localhost:3000, 5173). Configure CORS_ORIGINS for production."
+    );
+  }
+} else if (parsedOrigins.length === 0 && inferredProdOrigins.length > 0) {
   console.warn(
-    "CORS_ORIGINS not set; using fallback dev origins (localhost:3000, 5173). Configure CORS_ORIGINS for production."
+    `CORS_ORIGINS not set; using inferred origins: ${inferredProdOrigins.join(
+      ", "
+    )}`
   );
 }
 
@@ -55,6 +74,15 @@ app.use(
       return cb(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-CSRF-Token",
+      "X-Requested-With",
+    ],
+    optionsSuccessStatus: 200,
+    maxAge: 86400, // cache preflight for 1 day
   })
 );
 
